@@ -1,18 +1,31 @@
 /*
-Last updated on July 18, 2023.
 Not tested yet. Pinouts have to be revised
 */
 
 #include <Arduino.h>
-#include <Stepper.h>
+//#include <Stepper.h>
+#include <FastLED.h>
 
 #define NUM_USER_BUTTONS 6
 
-// define strip LED pins (need to be connected to PWM pin)
+// define strip LED pins (needs to be connectond on PWM pin)
 
-#define RED 50
-#define BLUE 51
-#define GREEN 52
+#define LED_PIN 13
+#define NUM_LEDS 56
+#define BRIGHTNESS 64
+#define LED_TYPE WS2811
+#define COLOR_ORDER GRB
+CRGB leds[NUM_LEDS];
+
+#define UPDATES_PER_SECOND 100
+
+// define other stuff for LEDs
+
+CRGBPalette16 currentPalette;
+TBlendType currentBlending;
+
+extern CRGBPalette16 myRedWhiteBluePalette;
+extern const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM;
 
 // input pins
 
@@ -20,6 +33,8 @@ int playerReadPin[NUM_USER_BUTTONS] = {1, 2, 3, 4, 5, 6};
 int acceptedPlayers[NUM_USER_BUTTONS] = {0, 0, 0, 0, 0, 0};
 const int resetPin = 11;
 const int startButtonPin = 8;
+
+/* Uncomment Stepper.h (and find right library for stepper bc there's a ton)
 
 // stepper pins. Might need to be changed depending on stepper pinouts
 
@@ -32,11 +47,6 @@ Stepper motor(512, stepPin1, stepPin2, stepPin3, stepPin4);
 
 // limit switch pins
 const int limitSwitchPin = 40;
-
-/* LED pins
-const int RED_LED = 50;
-const int BLUE_LED = 51;
-const int GREEN_LED = 52;
 */
 
 // variables used through code
@@ -87,28 +97,51 @@ void setup() { // sets up inputs
   
   // for the RGB strip
 
-  pinMode(RED, OUTPUT);
-  pinMode(BLUE, OUTPUT);
-  pinMode(GREEN, OUTPUT);
-  setColourRGB(0,0,0);
+  delay(3000); //safety delay on boot
 
-  // for the stepper
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.setBrightness(BRIGHTNESS);
+  currentPalette = RainbowColors_p;
+  currentBlending = LINEARBLEND;
 
-  pinMode(limitSwitchPin, INPUT);
+  const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM = {
+    CRGB::Red,
+    CRGB::Gray, // 'white' is too bright compared to red and blue
+    CRGB::Blue,
+    CRGB::Black,
 
-  pinMode(stepPin1, OUTPUT);
-  pinMode(stepPin2, OUTPUT);
-  pinMode(stepPin3, OUTPUT);
-  pinMode(stepPin4, OUTPUT);
+    CRGB::Red,
+    CRGB::Gray,
+    CRGB::Blue,
+    CRGB::Black,
+      
+    CRGB::Red,
+    CRGB::Red,
+    CRGB::Gray,
+    CRGB::Gray,
+    CRGB::Blue,
+    CRGB::Blue,
+    CRGB::Black,
+    CRGB::Black
+  };
+
+  // for the stepper (uncomment when you find the right library)
+
+  //pinMode(limitSwitchPin, INPUT);
+
+  //pinMode(stepPin1, OUTPUT);
+  //pinMode(stepPin2, OUTPUT);
+  //pinMode(stepPin3, OUTPUT);
+  //pinMode(stepPin4, OUTPUT);
 
   while(!Serial);
 
   Serial.begin(9600);
-  motor.setSpeed(20);
+  //motor.setSpeed(20);
 
 }
 
-// if we use RGB LED strip, use this following part:
+/* if we use RGB LED strip, use this following part:
 
 void setColourRGB(unsigned int red, unsigned int blue, unsigned int green) {
   analogWrite(RED, red);
@@ -148,7 +181,7 @@ void startColourRGB() {
   delay(300);
 }
 
-/* if we use single LEDs, use this following part:
+ if we use single LEDs, use this following part:
 
 void fadeWAIT_LED() { // function to either fade LEDs or switch their colours
   int brightness = 0;
@@ -176,6 +209,69 @@ void flashGO_LED() { // function to make LEDs flash
   delay(5);
 }
 */
+
+// if we use addressable LED strip
+
+void FillLEDsFromPaletteColors(uint8_t colorIndex){
+  uint8_t brightness = 255;
+
+  for(int i = 0; i < NUM_LEDS; i++)
+  {
+    leds[i] = ColorFromPalette(currentPalette, colorIndex, brightness, currentBlending);
+    colorIndex += 3;
+  }
+}
+
+void changePalettePeriodically(){
+  uint8_t secondHand = (millis()/1000) % 60;
+  static uint8_t lastSecond = 99;
+
+  if( lastSecond != secondHand) {
+    lastSecond = secondHand;
+    if( secondHand ==  0)  { currentPalette = RainbowColors_p;         currentBlending = LINEARBLEND; }
+    if( secondHand == 10)  { currentPalette = RainbowStripeColors_p;   currentBlending = NOBLEND;  }
+    if( secondHand == 15)  { currentPalette = RainbowStripeColors_p;   currentBlending = LINEARBLEND; }      
+    if( secondHand == 20)  { SetupPurpleAndGreenPalette();             currentBlending = LINEARBLEND; }
+    if( secondHand == 25)  { setUpRandomPalette();              currentBlending = LINEARBLEND; }
+    if( secondHand == 30)  { SetupBlackAndWhiteStripedPalette();       currentBlending = NOBLEND;     }    
+    if( secondHand == 35)  { SetupBlackAndWhiteStripedPalette();       currentBlending = LINEARBLEND; }
+    if( secondHand == 40)  { currentPalette = CloudColors_p;           currentBlending = LINEARBLEND; }
+    if( secondHand == 45)  { currentPalette = PartyColors_p;           currentBlending = LINEARBLEND; }
+    if( secondHand == 50)  { currentPalette = myRedWhiteBluePalette_p; currentBlending = NOBLEND;  }
+    if( secondHand == 55)  { currentPalette = myRedWhiteBluePalette_p; currentBlending = LINEARBLEND; }
+  }
+}
+
+void setUpRandomPalette(){
+  for( int i = 0; i < 16; i++) {
+    currentPalette[i] = CHSV( random8(), 255, random8());
+  }
+}
+
+void SetupBlackAndWhiteStripedPalette()
+{
+  // 'black out' all 16 palette entries...
+  fill_solid( currentPalette, 16, CRGB::Black);
+  // and set every fourth one to white.
+  currentPalette[0] = CRGB::White;
+  currentPalette[4] = CRGB::White;
+  currentPalette[8] = CRGB::White;
+  currentPalette[12] = CRGB::White;   
+}
+
+void SetupPurpleAndGreenPalette()
+{
+  CRGB purple = CHSV( HUE_PURPLE, 255, 255);
+  CRGB green  = CHSV( HUE_GREEN, 255, 255);
+  CRGB black  = CRGB::Black;
+    
+  currentPalette = CRGBPalette16(
+                                 green,  green,  black,  black,
+                                 purple, purple, black,  black,
+                                 green,  green,  black,  black,
+                                 purple, purple, black,  black );
+}
+
 
 void setRandomDelay() { // sets random time delay for game
   randomSeed(millis() + digitalRead(startButtonPin)); // check logic here with states
@@ -304,10 +400,19 @@ void fillCup() { // function to turn stepper to loser's cup
 void loop() {
   // main logic of the game. Still needs to be worked on.
 
+  changePalettePeriodically();
+  static uint8_t startIndex = 0;
+  startIndex = startIndex + 1;
+
+  FillLEDsFromPaletteColors(startIndex);
+
+  FastLED.show();
+  FastLED.delay(1000/UPDATES_PER_SECOND);
+
   switch(state)
   {
     case bootingUp:
-    cycleStripRGB();
+    //cycleStripRGB();
     break;
 
     case waitForStart:
