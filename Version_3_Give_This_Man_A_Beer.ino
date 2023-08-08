@@ -34,6 +34,10 @@ int acceptedPlayers[NUM_USER_BUTTONS] = {0, 0, 0, 0, 0, 0};
 const int resetPin = 11;
 const int startButtonPin = 8;
 
+// pump pins
+
+const int RELAY_PIN = 40;
+
 /* Uncomment Stepper.h (and find right library for stepper bc there's a ton)
 
 // stepper pins. Might need to be changed depending on stepper pinouts
@@ -94,6 +98,10 @@ void setup() { // sets up inputs
 
   pinMode(startButtonPin, INPUT);
   pinMode(resetPin, INPUT);
+
+    // for the pump
+
+  pinMode(RELAY_PIN, OUTPUT);
   
   // for the RGB strip
 
@@ -394,7 +402,11 @@ void checkForLoser() {
 }
 
 void fillCup() { // function to turn stepper to loser's cup
-  //has to be integrated into main logic function void loop()
+
+  digitalWrite(RELAY_PIN, HIGH); // turn on pump
+  delay(5000); // turn on pump for 5 seconds
+  digitalWrite(RELAY_PIN, LOW); // Turn off pump
+  
 }
 
 void loop() {
